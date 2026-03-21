@@ -25,17 +25,17 @@ implementation and testing of each story.
 
 **Purpose**: Initialize both projects, install dependencies, configure environment.
 
-- [ ] T001 Create `backend/` directory with `uv init` and add all dependencies: `fastapi uvicorn[standard] pydantic-settings httpx beautifulsoup4 pytrends praw openhosta fpdf2`
-- [ ] T002 Create `frontend/` directory with `bun create svelte@latest` (Svelte 5, TypeScript, SvelteKit)
+- [x] T001 Create `backend/` directory with `uv init` and add all dependencies: `fastapi uvicorn[standard] pydantic-settings httpx beautifulsoup4 pytrends praw openhosta fpdf2`
+- [x] T002 Create `frontend/` directory with `bun create svelte@latest` (Svelte 5, TypeScript, SvelteKit)
 - [ ] T003 [P] Run `bunx shadcn-svelte@latest init` in `frontend/` to set up shadcn-svelte
-- [ ] T004 [P] Create `backend/.env.example` with all required env vars: `APP_OPENAI_API_KEY`, `APP_LLM_MODEL`, `APP_CORS_ORIGINS`, `APP_SOURCE_TIMEOUT`
-- [ ] T005 [P] Create `frontend/.env.example` with `PUBLIC_API_BASE=http://localhost:8000`
-- [ ] T006 Create `run.sh` at repo root that starts FastAPI on port 8000 (`uv run uvicorn`) and SvelteKit on port 5173 (`bun run dev`) with `trap` cleanup on Ctrl+C
-- [ ] T007 [P] Create `backend/src/config.py` — pydantic-settings `Settings` class with: `openai_api_key`, `llm_model` (default `gpt-4o-mini`), `cors_origins`, `source_timeout` (default `10`), env_prefix `APP_`
-- [ ] T008 [P] Create `backend/src/main.py` — FastAPI app factory with `CORSMiddleware`, health endpoint `GET /health → {"status": "ok"}`, router mounting for `/stream` and `/export`
-- [ ] T009 [P] Create `backend/src/models/sse.py` — Pydantic models for all SSE event payloads: `MarketplaceProductsEvent`, `LLMTokenEvent`, `LLMCompleteEvent`, `LLMErrorEvent`, `SourceUnavailableEvent`, `ExportReadyEvent`
-- [ ] T010 [P] Create `backend/src/models/report.py` — Pydantic models: `MarketplaceProduct`, `SourceResult`, `AggregatedData`, `AnalysisReport`, `ViabilityScore`, `TargetPersona`, `DifferentiationAngles`, `CompetitiveOverview`
-- [ ] T011 [P] Create `frontend/src/lib/types.ts` — Zod schemas for all SSE event payloads matching `contracts/sse-events.md`: `MarketplaceProductsEventSchema`, `LLMTokenEventSchema`, `LLMCompleteEventSchema`, `LLMErrorEventSchema`, `SourceUnavailableEventSchema`, `ExportReadyEventSchema` + union `AnySSEEvent`
+- [x] T004 [P] Create `backend/.env.example` with all required env vars: `APP_OPENAI_API_KEY`, `APP_LLM_MODEL`, `APP_CORS_ORIGINS`, `APP_SOURCE_TIMEOUT`
+- [x] T005 [P] Create `frontend/.env.example` with `PUBLIC_API_BASE=http://localhost:8000`
+- [x] T006 Create `run.sh` at repo root that starts FastAPI on port 8000 (`uv run uvicorn`) and SvelteKit on port 5173 (`bun run dev`) with `trap` cleanup on Ctrl+C
+- [x] T007 [P] Create `backend/src/config.py` — pydantic-settings `Settings` class with: `openai_api_key`, `llm_model` (default `gpt-4o-mini`), `cors_origins`, `source_timeout` (default `10`), env_prefix `APP_`
+- [x] T008 [P] Create `backend/src/main.py` — FastAPI app factory with `CORSMiddleware`, health endpoint `GET /health → {"status": "ok"}`, router mounting for `/stream` and `/export`
+- [x] T009 [P] Create `backend/src/models/sse.py` — Pydantic models for all SSE event payloads: `MarketplaceProductsEvent`, `LLMTokenEvent`, `LLMCompleteEvent`, `LLMErrorEvent`, `SourceUnavailableEvent`, `ExportReadyEvent`
+- [x] T010 [P] Create `backend/src/models/report.py` — Pydantic models: `MarketplaceProduct`, `SourceResult`, `AggregatedData`, `AnalysisReport`, `ViabilityScore`, `TargetPersona`, `DifferentiationAngles`, `CompetitiveOverview`
+- [x] T011 [P] Create `frontend/src/lib/types.ts` — Zod schemas for all SSE event payloads matching `contracts/sse-events.md`: `MarketplaceProductsEventSchema`, `LLMTokenEventSchema`, `LLMCompleteEventSchema`, `LLMErrorEventSchema`, `SourceUnavailableEventSchema`, `ExportReadyEventSchema` + union `AnySSEEvent`
 
 ---
 
@@ -45,13 +45,13 @@ implementation and testing of each story.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T012 Create `backend/src/pipeline/sources/amazon.py` — async `fetch_amazon(keyword: str, timeout: int) → SourceResult` using `httpx` + `BeautifulSoup4`; parse product title, price, URL from search page; return `SourceResult(status="timeout")` on `asyncio.TimeoutError` or `httpx.TimeoutException`
-- [ ] T013 [P] Create `backend/src/pipeline/sources/trends.py` — async `fetch_trends(keyword: str, timeout: int) → SourceResult` using `pytrends`; extract interest-over-time data and related queries; wrap with `asyncio.wait_for` for timeout
-- [ ] T014 [P] Create `backend/src/pipeline/sources/reddit.py` — async `fetch_reddit(keyword: str, timeout: int) → SourceResult` using `httpx` to `https://www.reddit.com/search.json?q={keyword}&sort=relevance&limit=25`; parse post titles, scores, subreddits; include `User-Agent: Market-Intelligence-Bot/1.0` header
-- [ ] T015 Create `backend/src/pipeline/orchestrator.py` — async `run_pipeline(keyword: str, settings: Settings) → AsyncGenerator[SSEEvent, None]`; launches Amazon, Trends, Reddit concurrently with `asyncio.gather`; emits `source_unavailable` events for timed-out sources; emits `marketplace_products` immediately after Amazon resolves; builds `AggregatedData`; then calls LLM analysis chain (stubs in Phase 2, wired in US1)
-- [ ] T016 Create `backend/src/routes/stream.py` — `GET /stream?keyword={kw}` endpoint; validates keyword is non-empty (400 if empty); returns `StreamingResponse(orchestrator.run_pipeline(...), media_type="text/event-stream")` with headers `Cache-Control: no-cache`, `X-Accel-Buffering: no`
-- [ ] T017 Create `frontend/src/lib/sse.ts` — `createSSEStream(url: string, callbacks: SSECallbacks) → () => void`; opens `EventSource`; validates each event with Zod union schema; dispatches typed events to callbacks; handles named `error` events and connection drops; returns cleanup function (following pattern from `tests/sveltekit+fastapi/frontend/src/lib/sse.ts`)
-- [ ] T018 Create `frontend/src/routes/api/sse/+server.ts` — BFF SSE proxy; receives `GET /api/sse?keyword={kw}`; fetches `http://localhost:8000/stream?keyword={kw}`; pipes `ReadableStream` to browser; passes through SSE headers; returns 502 SSE error event if backend unreachable (following pattern from `tests/sveltekit+fastapi/frontend/src/routes/api/sse/+server.ts`)
+- [x] T012 Create `backend/src/pipeline/sources/amazon.py` — stub with `NotImplementedError` (TDD: test_sources.py RED)
+- [x] T013 [P] Create `backend/src/pipeline/sources/trends.py` — stub with `NotImplementedError` (TDD: test_sources.py RED)
+- [x] T014 [P] Create `backend/src/pipeline/sources/reddit.py` — stub with `NotImplementedError` (TDD: test_sources.py RED)
+- [x] T015 Create `backend/src/pipeline/orchestrator.py` — stub pipeline emitting placeholder marketplace_products + export_ready
+- [x] T016 Create `backend/src/routes/stream.py` — `GET /stream?keyword={kw}` endpoint wired to orchestrator stub
+- [x] T017 Create `frontend/src/lib/sse.ts` — `createAnalysisStream` with named SSE event dispatching
+- [x] T018 Create `frontend/src/routes/api/sse/+server.ts` — BFF SSE proxy with keyword forwarding
 
 **Checkpoint**: Foundation ready — pipeline fetches data, emits SSE, frontend proxy works.
 
