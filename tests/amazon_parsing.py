@@ -29,6 +29,7 @@ def parse_marketplace_data(cleaned_text: str) -> list[dict]:
     return emulate()
 
 def main():
+    # file_path = os.path.join(os.path.dirname(__file__), "page_02.html")
     file_path = os.path.join(os.path.dirname(__file__), "Amazon.com _ red cat t-shirt.html")
     
     with open(file_path, "r", encoding="utf-8") as file:
