@@ -3,6 +3,11 @@
   import { createWorkflowConnection, type WorkflowConnection } from '$lib/ws';
   import StepRenderer from '$lib/components/StepRenderer.svelte';
   import type { StepState, WsStatus } from '$lib/workflow-types';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Alert, AlertDescription } from '$lib/components/ui/alert';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Spinner } from '$lib/components/ui/spinner';
 
   const WS_URL = 'ws://localhost:8000/ws/workflow';
 
@@ -92,7 +97,6 @@
 
   function handleStepAction(action: object) {
     conn?.send(action);
-    // Optimistically update UI for confirmation
     const a = action as { type: string; step_id?: string; confirmed?: boolean };
     if (a.type === 'confirmation' && a.step_id) {
       updateStep(a.step_id, { status: 'complete' });
@@ -116,52 +120,64 @@
   $effect(() => () => conn?.close());
 </script>
 
-<main>
-  <header>
-    <h1>Guided Analysis</h1>
-    <a href="/">← Home</a>
+<main class="max-w-2xl mx-auto py-8 px-4">
+  <header class="flex justify-between items-center mb-6">
+    <h1 class="text-xl font-bold">Guided Analysis</h1>
+    <a href="/" class="text-sm text-primary hover:underline">← Home</a>
   </header>
 
   {#if workflowState.status === 'idle' || workflowState.status === 'closed'}
     {#if workflowState.status === 'closed'}
-      <p class="done">✓ Workflow complete (run: {workflowState.runId})</p>
-      <button onclick={reset}>Start new analysis</button>
+      <Alert class="mb-4 border-green-500 bg-green-50 text-green-800">
+        <AlertDescription>✓ Workflow complete — run: <code class="font-mono text-xs">{workflowState.runId}</code></AlertDescription>
+      </Alert>
+      <Button onclick={reset}>Start new analysis</Button>
     {:else}
-      <form onsubmit={startWorkflow}>
-        <input
+      <form onsubmit={startWorkflow} class="flex gap-2 mb-4">
+        <Input
           type="text"
           bind:value={workflowState.description}
           placeholder="Describe your product idea…"
           aria-label="Product description"
+          class="flex-1"
         />
-        <button type="submit" disabled={!workflowState.description.trim()}>Start</button>
+        <Button type="submit" disabled={!workflowState.description.trim()}>Start</Button>
       </form>
     {/if}
   {:else}
     {#if workflowState.totalSteps > 0}
-      <p class="progress">
+      <p class="text-sm text-muted-foreground mb-4">
         Step {workflowState.steps.filter((s) => s.status === 'complete' || s.status === 'confirmation').length}
         / {workflowState.totalSteps}
       </p>
     {/if}
 
     {#if workflowState.errorMsg}
-      <p class="error">{workflowState.errorMsg}</p>
+      <Alert variant="destructive" class="mb-4">
+        <AlertDescription>{workflowState.errorMsg}</AlertDescription>
+      </Alert>
     {/if}
 
-    <div class="steps">
+    <div class="flex flex-col gap-3">
       {#each workflowState.steps as step (step.step_id)}
-        <section class="step step--{step.status}">
-          <div class="step-header">
-            <span class="step-num">{step.step_number}</span>
-            <span class="step-label">{step.label}</span>
+        {@const borderClass = step.status === 'active' ? 'border-primary' : step.status === 'processing' ? 'border-yellow-400' : step.status === 'error' ? 'border-destructive' : 'border-border'}
+        {@const headerClass = step.status === 'active' ? 'bg-primary/10' : step.status === 'processing' ? 'bg-yellow-50' : 'bg-muted/50'}
+        <section class="border rounded-lg overflow-hidden {borderClass}">
+          <div class="flex items-center gap-2 px-3 py-2 {headerClass}">
+            <span class="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+              {step.step_number}
+            </span>
+            <span class="font-medium text-sm flex-1">{step.label}</span>
             {#if step.status === 'processing'}
-              <span class="spinner">●</span>
+              <Spinner class="w-4 h-4 text-yellow-500" />
+            {/if}
+            {#if step.status === 'complete'}
+              <Badge variant="secondary" class="text-xs">Done</Badge>
             {/if}
           </div>
 
           {#if (step.status === 'result' || step.status === 'complete' || step.status === 'confirmation') && step.component_type}
-            <div class="step-body">
+            <div class="p-3">
               <StepRenderer
                 componentType={step.component_type}
                 data={step.data ?? {}}
@@ -173,39 +189,10 @@
           {/if}
 
           {#if step.status === 'error'}
-            <p class="step-error">{step.error}</p>
+            <p class="text-destructive text-sm px-3 py-2">{step.error}</p>
           {/if}
         </section>
       {/each}
     </div>
   {/if}
 </main>
-
-<style>
-  main { max-width: 720px; margin: 2rem auto; padding: 1rem; font-family: system-ui, sans-serif; }
-  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-  h1 { margin: 0; }
-  a { color: #0070f3; text-decoration: none; font-size: 0.9rem; }
-  form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-  input { flex: 1; padding: 0.5rem 0.75rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; }
-  button { padding: 0.5rem 1.25rem; background: #0070f3; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .progress { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
-  .error { background: #fee; color: #c00; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 1rem; }
-  .done { background: #efe; color: #060; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 1rem; }
-  .steps { display: flex; flex-direction: column; gap: 0.75rem; }
-  .step { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
-  .step--active { border-color: #0070f3; }
-  .step--processing { border-color: #f0a000; }
-  .step--error { border-color: #c00; }
-  .step--complete { border-color: #ccc; }
-  .step-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.75rem; background: #fafafa; }
-  .step--active .step-header { background: #e8f0fe; }
-  .step--processing .step-header { background: #fff8e1; }
-  .step-num { background: #0070f3; color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
-  .step-label { font-weight: 500; font-size: 0.9rem; flex: 1; }
-  .spinner { animation: pulse 1s infinite; color: #f0a000; }
-  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
-  .step-body { padding: 0.75rem; }
-  .step-error { color: #c00; font-size: 0.85rem; padding: 0.5rem 0.75rem; margin: 0; }
-</style>

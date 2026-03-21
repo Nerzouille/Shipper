@@ -1,5 +1,9 @@
 <svelte:options runes={true} />
 <script lang="ts">
+  import { Alert, AlertDescription } from '$lib/components/ui/alert';
+  import { Separator } from '$lib/components/ui/separator';
+  import { Badge } from '$lib/components/ui/badge';
+
   let { data }: {
     data: {
       sources_available?: string[];
@@ -10,29 +14,34 @@
   } = $props();
 </script>
 
-<div class="step-content">
+<div class="flex flex-col gap-3">
   {#if data.sources_unavailable && data.sources_unavailable.length > 0}
-    <p class="warning">⚠ Some sources unavailable: {data.sources_unavailable.join(', ')}</p>
+    <Alert class="border-yellow-400 bg-yellow-50 text-yellow-800">
+      <AlertDescription>⚠ Some sources unavailable: {data.sources_unavailable.join(', ')}</AlertDescription>
+    </Alert>
   {/if}
-  {#if data.trend_summary}
-    <div class="section">
-      <h4>Trends</h4>
-      <p>{data.trend_summary}</p>
-    </div>
-  {/if}
-  {#if data.sentiment_summary}
-    <div class="section">
-      <h4>Community Sentiment</h4>
-      <p>{data.sentiment_summary}</p>
-    </div>
-  {/if}
-  <p class="sources">Sources available: {(data.sources_available ?? []).join(', ') || 'none'}</p>
-</div>
 
-<style>
-  .step-content { display: flex; flex-direction: column; gap: 0.75rem; }
-  .warning { background: #fff8e1; color: #856404; padding: 0.5rem 0.75rem; border-radius: 6px; margin: 0; font-size: 0.9rem; }
-  .section h4 { margin: 0 0 0.25rem; font-size: 0.9rem; color: #555; text-transform: uppercase; letter-spacing: 0.05em; }
-  .section p { margin: 0; font-size: 0.9rem; }
-  .sources { font-size: 0.8rem; color: #888; margin: 0; }
-</style>
+  {#if data.trend_summary}
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Trends</p>
+      <p class="text-sm">{data.trend_summary}</p>
+    </div>
+  {/if}
+
+  {#if data.trend_summary && data.sentiment_summary}
+    <Separator />
+  {/if}
+
+  {#if data.sentiment_summary}
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Community Sentiment</p>
+      <p class="text-sm">{data.sentiment_summary}</p>
+    </div>
+  {/if}
+
+  <div class="flex flex-wrap gap-1">
+    {#each (data.sources_available ?? []) as src}
+      <Badge variant="outline" class="text-xs">{src}</Badge>
+    {/each}
+  </div>
+</div>

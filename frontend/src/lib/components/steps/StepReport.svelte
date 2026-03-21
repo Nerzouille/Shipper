@@ -1,29 +1,26 @@
 <svelte:options runes={true} />
 <script lang="ts">
+  import { Alert, AlertDescription } from '$lib/components/ui/alert';
+  import { Button } from '$lib/components/ui/button';
+
   let { data }: { data: { run_id?: string; markdown_available?: boolean; note?: string } } = $props();
 </script>
 
-<div class="step-content">
-  <p class="done">✓ Report generated</p>
+<div class="flex flex-col gap-3">
+  <Alert class="border-green-500 bg-green-50 text-green-800">
+    <AlertDescription>✓ Report generated</AlertDescription>
+  </Alert>
   {#if data.run_id}
-    <p class="meta">Run ID: <code>{data.run_id}</code></p>
+    <p class="text-sm text-muted-foreground">Run ID: <code class="font-mono text-xs bg-muted px-1 py-0.5 rounded">{data.run_id}</code></p>
   {/if}
   {#if data.note}
-    <p class="note">{data.note}</p>
+    <p class="text-sm text-muted-foreground italic">{data.note}</p>
   {/if}
   {#if data.markdown_available}
-    <a href="/api/export/md?run_id={data.run_id}" class="export-btn">Export Markdown</a>
+    <a href="/api/export/md?run_id={data.run_id}" class="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent transition-colors">
+      Export Markdown
+    </a>
   {:else}
-    <p class="soon">Export not yet available (stub).</p>
+    <p class="text-sm text-muted-foreground italic">Export not yet available (stub).</p>
   {/if}
 </div>
-
-<style>
-  .step-content { display: flex; flex-direction: column; gap: 0.75rem; }
-  .done { color: #155724; background: #d4edda; padding: 0.5rem 0.75rem; border-radius: 6px; margin: 0; font-weight: 500; }
-  .meta { font-size: 0.85rem; color: #555; margin: 0; }
-  code { background: #f0f0f0; padding: 0.1rem 0.4rem; border-radius: 4px; }
-  .note { font-size: 0.85rem; color: #888; margin: 0; }
-  .soon { font-size: 0.85rem; color: #888; font-style: italic; margin: 0; }
-  .export-btn { display: inline-block; padding: 0.5rem 1.25rem; background: #0070f3; color: white; text-decoration: none; border-radius: 6px; font-size: 0.9rem; }
-</style>

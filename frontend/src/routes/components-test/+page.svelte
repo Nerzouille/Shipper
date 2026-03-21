@@ -1,8 +1,11 @@
 <svelte:options runes={true} />
 <script lang="ts">
   import StepRenderer from '$lib/components/StepRenderer.svelte';
+  import { Card, CardHeader, CardTitle, CardContent } from '$lib/components/ui/card';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Alert, AlertDescription } from '$lib/components/ui/alert';
+  import { Separator } from '$lib/components/ui/separator';
 
-  // Fake data for each component type
   const fixtures = [
     {
       title: 'StepDescriptionInput',
@@ -113,32 +116,37 @@
   }
 </script>
 
-<main>
-  <header>
-    <h1>Component Test Page</h1>
-    <a href="/">← Home</a>
+<main class="max-w-4xl mx-auto py-8 px-4">
+  <header class="flex justify-between items-center mb-2">
+    <h1 class="text-xl font-bold">Component Test Page</h1>
+    <a href="/" class="text-sm text-primary hover:underline">← Home</a>
   </header>
-  <p class="subtitle">All workflow step components with fake data. Use this page to verify component rendering before connecting to the WebSocket backend.</p>
+  <p class="text-muted-foreground text-sm mb-6">All workflow step components with fake data. Use this page to verify component rendering before connecting to the WebSocket backend.</p>
 
   {#if actions.length > 0}
-    <section class="action-log">
-      <h3>Action Log (last 10)</h3>
-      <ul>
-        {#each actions as a}
-          <li><code>{a}</code></li>
-        {/each}
-      </ul>
-    </section>
+    <Alert class="mb-6">
+      <AlertDescription>
+        <p class="font-semibold mb-2 text-xs uppercase tracking-wide">Action Log (last 10)</p>
+        <div class="flex flex-col gap-1">
+          {#each actions as a}
+            <code class="text-xs">{a}</code>
+          {/each}
+        </div>
+      </AlertDescription>
+    </Alert>
   {/if}
 
-  <div class="grid">
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     {#each fixtures as f}
-      <section class="card">
-        <div class="card-header">
-          <span class="component-name">{f.title}</span>
-          <code class="type-badge">{f.componentType}</code>
-        </div>
-        <div class="card-body">
+      <Card>
+        <CardHeader class="pb-2">
+          <div class="flex items-center justify-between gap-2">
+            <CardTitle class="text-sm font-semibold">{f.title}</CardTitle>
+            <Badge variant="secondary" class="text-xs font-mono">{f.componentType}</Badge>
+          </div>
+        </CardHeader>
+        <Separator />
+        <CardContent class="pt-3">
           <StepRenderer
             componentType={f.componentType}
             data={f.data}
@@ -146,27 +154,8 @@
             stepId={f.stepId}
             onAction={(a) => handleAction(f.title, a)}
           />
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     {/each}
   </div>
 </main>
-
-<style>
-  main { max-width: 900px; margin: 2rem auto; padding: 1rem; font-family: system-ui, sans-serif; }
-  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-  h1 { margin: 0; }
-  a { color: #0070f3; text-decoration: none; font-size: 0.9rem; }
-  .subtitle { color: #555; margin-bottom: 1.5rem; }
-  .action-log { background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px; padding: 0.75rem; margin-bottom: 1.5rem; }
-  .action-log h3 { margin: 0 0 0.5rem; font-size: 0.9rem; }
-  .action-log ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.25rem; }
-  .action-log code { font-size: 0.8rem; }
-  .grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
-  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
-  .card { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
-  .card-header { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.75rem; background: #f8f8f8; border-bottom: 1px solid #e0e0e0; }
-  .component-name { font-weight: 600; font-size: 0.85rem; }
-  .type-badge { font-size: 0.75rem; background: #e8f0fe; color: #1a56db; padding: 0.15rem 0.5rem; border-radius: 4px; }
-  .card-body { padding: 0.75rem; }
-</style>

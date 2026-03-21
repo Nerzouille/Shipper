@@ -22,9 +22,14 @@ export function createWorkflowConnection(
 ): WorkflowConnection {
   callbacks.onStatusChange('connecting');
   const ws = new WebSocket(url);
+  const pendingMessages: string[] = [];
 
   ws.addEventListener('open', () => {
     callbacks.onStatusChange('open');
+    for (const msg of pendingMessages) {
+      ws.send(msg);
+    }
+    pendingMessages.length = 0;
   });
 
   ws.addEventListener('message', (event) => {
@@ -55,8 +60,11 @@ export function createWorkflowConnection(
 
   return {
     send: (msg: object) => {
+      const payload = JSON.stringify(msg);
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(msg));
+        ws.send(payload);
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        pendingMessages.push(payload);
       }
     },
     close: () => ws.close(),

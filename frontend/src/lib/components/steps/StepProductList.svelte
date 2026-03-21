@@ -4,25 +4,15 @@
   const products = $derived(data.products ?? []);
 </script>
 
-<div class="step-content">
-  <p class="hint">{products.length} product{products.length !== 1 ? 's' : ''} found:</p>
-  <ul>
+<div class="flex flex-col gap-2">
+  <p class="text-sm text-muted-foreground">{products.length} product{products.length !== 1 ? 's' : ''} found:</p>
+  <div class="flex flex-col gap-2">
     {#each products as p}
-      <li>
-        <span class="title">{p.title}</span>
-        <span class="price">{p.price}</span>
-        <a href={p.url} target="_blank" rel="noopener">View →</a>
-      </li>
+      <div class="flex items-center gap-3 px-3 py-2 bg-muted/30 border border-border rounded-md">
+        <span class="flex-1 font-medium text-sm">{p.title}</span>
+        <span class="text-green-700 text-sm font-medium">{p.price}</span>
+        <a href={p.url} target="_blank" rel="noopener" class="text-sm text-primary hover:underline">View →</a>
+      </div>
     {/each}
-  </ul>
+  </div>
 </div>
-
-<style>
-  .step-content { display: flex; flex-direction: column; gap: 0.5rem; }
-  .hint { color: #666; margin: 0; font-size: 0.9rem; }
-  ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-  li { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; }
-  .title { flex: 1; font-weight: 500; font-size: 0.9rem; }
-  .price { color: #060; font-size: 0.9rem; }
-  a { font-size: 0.85rem; color: #0070f3; text-decoration: none; }
-</style>

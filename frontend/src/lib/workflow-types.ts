@@ -39,14 +39,14 @@ export const StepResultSchema = z.object({
   type: z.literal('step_result'),
   step_id: z.string(),
   component_type: z.string(),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
 });
 
 export const ConfirmationRequestSchema = z.object({
   type: z.literal('confirmation_request'),
   step_id: z.string(),
   component_type: z.string(),
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
 });
 
 export const StepErrorSchema = z.object({
