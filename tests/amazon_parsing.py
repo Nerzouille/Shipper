@@ -1,9 +1,10 @@
 import os
+import json
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 from OpenHosta import emulate
 
-MAX_TEXT_LENGTH = 15000
+MAX_TEXT_LENGTH = 30000
 
 class Product(BaseModel):
     title: str = Field(description="The full name of the product")
@@ -16,7 +17,8 @@ class Product(BaseModel):
 
 def parse_marketplace_data(cleaned_text: str) -> list[dict]:
     """
-    Parse the cleaned text from a marketplace search page and extract product information.
+    Parse the cleaned text from a marketplace search page and extract ALL product information found.
+    You MUST extract every single product present in the text, do not limit yourself to 3.
     The returned list of dictionaries must strictly contain the following keys:
     - title (str): The full name of the product
     - price (str): The price of the product, including currency, e.g. 'EUR 10.24'
@@ -29,8 +31,8 @@ def parse_marketplace_data(cleaned_text: str) -> list[dict]:
     return emulate()
 
 def main():
-    # file_path = os.path.join(os.path.dirname(__file__), "page_02.html")
-    file_path = os.path.join(os.path.dirname(__file__), "Amazon.com _ red cat t-shirt.html")
+    file_path = os.path.join(os.path.dirname(__file__), "page_01.html")
+    # file_path = os.path.join(os.path.dirname(__file__), "Amazon.com _ red cat t-shirt.html")
     
     with open(file_path, "r", encoding="utf-8") as file:
         raw_html_string = file.read()
@@ -59,8 +61,13 @@ def main():
             print(f"Skipping invalid item: {item}\nReason: {e}\n")
             
     print(f"✅ Extracted {len(valid_products)} valid products!\n")
-    for p in valid_products:
-        print(p.model_dump_json(indent=2))
+    
+    output_file = os.path.join(os.path.dirname(__file__), "extracted_products.json")
+    with open(output_file, "w", encoding="utf-8") as f:
+        json_data = [p.model_dump() for p in valid_products]
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
+        
+    print(f"📁 Saved all products to {output_file}")
 
 if __name__ == "__main__":
     main()
