@@ -134,9 +134,9 @@ if __name__ == "__main__":
     time.sleep(2)
 
     # 6. Suggestions / autocomplete
-    print("\n[6] Suggestions Google — 'hackathon'")
-    suggestions = get_suggestions("hackathon")
+    print("\n[6] Suggestions Google — tente de camping")
+    suggestions = get_suggestions("tente de camping")
     for s in suggestions:
-        print(f"  - {s.get('title')} ({s.get('type')})")
+        print(f"  - {s})")
 
     print("\n[OK] POC terminé.")
