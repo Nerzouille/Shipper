@@ -1,2 +1,22 @@
 .claude
 .specify
+.vscode
+
+# Python
+backend/.venv/
+**/__pycache__/
+**/*.pyc
+backend/.pytest_cache/
+
+# Node / Bun
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
+# Environment
+backend/.env
+frontend/.env
+
+# OS
+.DS_Store
+Thumbs.db
