@@ -1,3 +1,5 @@
 .venv
 .env
 *.html
+*.json
+*__pycache__
