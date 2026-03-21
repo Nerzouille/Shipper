@@ -1,0 +1,434 @@
+"""
+Amazon Scraper - Hackathon Edition
+===================================
+Scrape Amazon.fr pour un mot-clé donné et exporte les données en CSV.
+
+Champs extraits :
+  - nom_produit
+  - prix
+  - revendeur (sold by)
+  - description
+  - images (URLs séparées par |)
+  - avis_note
+  - avis_count
+  - avis_details (top avis textuels avec failles produit)
+  - mots_cles_references (ASIN, keywords Amazon)
+  - articles_associes (frequently bought together)
+  - url_produit
+
+Usage :
+  pip install playwright beautifulsoup4 pandas lxml
+  playwright install chromium
+  python amazon_scraper.py --query "abris de jardin" --pages 3 --output results.csv
+"""
+
+import asyncio
+import csv
+import json
+import re
+import time
+import random
+import argparse
+import sys
+from pathlib import Path
+from datetime import datetime
+
+import pandas as pd
+from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+
+BASE_URL = "https://www.amazon.fr"
+
+# User-agents réels rotatifs (pas besoin de lib externe)
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+]
+
+CSV_FIELDS = [
+    "nom_produit",
+    "prix",
+    "revendeur",
+    "description",
+    "images",
+    "avis_note",
+    "avis_count",
+    "avis_details",
+    "mots_cles_references",
+    "articles_associes",
+    "url_produit",
+    "asin",
+]
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def random_delay(min_s=1.5, max_s=4.0):
+    time.sleep(random.uniform(min_s, max_s))
+
+def clean(text: str) -> str:
+    if not text:
+        return ""
+    return " ".join(text.split()).strip()
+
+def extract_asin(url: str) -> str:
+    match = re.search(r'/dp/([A-Z0-9]{10})', url)
+    return match.group(1) if match else ""
+
+# ─── Page-level parsers ───────────────────────────────────────────────────────
+
+def parse_search_results(html: str) -> list[dict]:
+    """Retourne une liste de {url, asin} depuis une page de résultats."""
+    soup = BeautifulSoup(html, "lxml")
+    products = []
+
+    for div in soup.select('[data-component-type="s-search-result"]'):
+        asin = div.get("data-asin", "")
+        link_tag = div.select_one("h2 a")
+        if not link_tag:
+            continue
+        href = link_tag.get("href", "")
+        url = BASE_URL + href if href.startswith("/") else href
+        # Nettoyage URL (enlève les params de tracking)
+        url = re.sub(r'\?.*', '', url)
+        if asin and url:
+            products.append({"asin": asin, "url_produit": url})
+
+    return products
+
+
+def parse_product_page(html: str, url: str) -> dict:
+    """Parse une fiche produit complète."""
+    soup = BeautifulSoup(html, "lxml")
+    data = {field: "" for field in CSV_FIELDS}
+    data["url_produit"] = url
+    data["asin"] = extract_asin(url)
+
+    # ── Nom du produit ──────────────────────────────────────────────────────
+    title_tag = (
+        soup.select_one("#productTitle")
+        or soup.select_one("#title")
+        or soup.select_one("h1.a-size-large")
+    )
+    data["nom_produit"] = clean(title_tag.get_text()) if title_tag else ""
+
+    # ── Prix ────────────────────────────────────────────────────────────────
+    price = ""
+    for sel in [
+        ".a-price .a-offscreen",
+        "#priceblock_ourprice",
+        "#priceblock_dealprice",
+        ".a-price-whole",
+        "#price_inside_buybox",
+        ".a-color-price",
+    ]:
+        el = soup.select_one(sel)
+        if el:
+            price = clean(el.get_text())
+            break
+    data["prix"] = price
+
+    # ── Revendeur ───────────────────────────────────────────────────────────
+    seller = ""
+    for sel in [
+        "#sellerProfileTriggerId",
+        "#merchant-info a",
+        "#tabular-buybox-truncate-1 .tabular-buybox-text",
+        ".offer-display-feature-text",
+    ]:
+        el = soup.select_one(sel)
+        if el:
+            seller = clean(el.get_text())
+            break
+    # Fallback texte "Vendu par"
+    if not seller:
+        merchant_block = soup.find(text=re.compile(r'Vendu par|Sold by', re.I))
+        if merchant_block:
+            parent = merchant_block.find_parent()
+            if parent:
+                seller = clean(parent.get_text())
+    data["revendeur"] = seller
+
+    # ── Description ─────────────────────────────────────────────────────────
+    desc_parts = []
+    # Feature bullets
+    for li in soup.select("#feature-bullets li span.a-list-item"):
+        t = clean(li.get_text())
+        if t:
+            desc_parts.append(t)
+    # Description longue
+    if not desc_parts:
+        for sel in ["#productDescription p", "#aplus p", "#bookDescription_feature_div"]:
+            for el in soup.select(sel):
+                t = clean(el.get_text())
+                if t:
+                    desc_parts.append(t)
+    data["description"] = " | ".join(desc_parts[:10])  # max 10 bullets
+
+    # ── Images ──────────────────────────────────────────────────────────────
+    images = []
+    # Méthode 1 : JSON embarqué dans colorImages
+    img_json_match = re.search(r"'colorImages'\s*:\s*\{[^}]+\}\s*,\s*'initial'\s*:\s*(\[.*?\])\s*\}", html, re.S)
+    if img_json_match:
+        try:
+            img_data = json.loads(img_json_match.group(1))
+            for img in img_data:
+                large = img.get("large") or img.get("hiRes") or img.get("thumb")
+                if large and large not in images:
+                    images.append(large)
+        except Exception:
+            pass
+    # Méthode 2 : balises img directes
+    if not images:
+        for img_tag in soup.select("#imgTagWrapperId img, #altImages img"):
+            src = img_tag.get("src") or img_tag.get("data-src") or ""
+            if "images-amazon" in src and "_SL" in src:
+                # Upscale en grande résolution
+                src = re.sub(r'_S[XL]\d+_', '_SL1500_', src)
+                if src not in images:
+                    images.append(src)
+    data["images"] = " | ".join(images[:8])
+
+    # ── Note et nombre d'avis ───────────────────────────────────────────────
+    note_tag = soup.select_one("#acrPopover .a-size-base, #averageCustomerReviews .a-icon-alt")
+    if note_tag:
+        data["avis_note"] = clean(note_tag.get_text()).split(" ")[0]
+
+    count_tag = soup.select_one("#acrCustomerReviewText, #acrCustomerReviewLink")
+    if count_tag:
+        data["avis_count"] = clean(count_tag.get_text())
+
+    # ── Avis détaillés (texte + détection failles produit) ──────────────────
+    reviews = []
+    for review_div in soup.select('[data-hook="review"]')[:8]:
+        rating_el = review_div.select_one('[data-hook="review-star-rating"] .a-icon-alt')
+        title_el = review_div.select_one('[data-hook="review-title"]')
+        body_el = review_div.select_one('[data-hook="review-body"]')
+        rating = clean(rating_el.get_text()) if rating_el else "?"
+        title = clean(title_el.get_text()) if title_el else ""
+        body = clean(body_el.get_text()) if body_el else ""
+        if body:
+            reviews.append(f"[{rating}] {title} — {body[:300]}")
+    data["avis_details"] = " || ".join(reviews)
+
+    # ── Articles associés ───────────────────────────────────────────────────
+    assoc = []
+    for sel in ["#sims-consolidated-1 .a-list-item", "#purchase-sims-feature .a-link-normal", "#bundle-v2-btf .a-link-normal"]:
+        for el in soup.select(sel)[:5]:
+            t = clean(el.get_text())
+            if t and len(t) > 5:
+                assoc.append(t)
+    data["articles_associes"] = " | ".join(dict.fromkeys(assoc))  # dédupliqué
+
+    # ── Mots-clés / références (ASIN + keywords produit) ───────────────────
+    keywords = [data["asin"]]
+    # Breadcrumb categories = mots-clés pertinents
+    for el in soup.select("#wayfinding-breadcrumbs_feature_div a, .a-breadcrumb a"):
+        t = clean(el.get_text())
+        if t:
+            keywords.append(t)
+    # Détails techniques (tableau)
+    for row in soup.select("#productDetails_techSpec_section_1 tr, #productDetails_detailBullets_sections1 tr"):
+        th = row.select_one("th")
+        td = row.select_one("td")
+        if th and td:
+            keywords.append(f"{clean(th.get_text())}:{clean(td.get_text())}")
+    data["mots_cles_references"] = " | ".join(keywords[:15])
+
+    return data
+
+
+# ─── Core async scraper ───────────────────────────────────────────────────────
+
+async def fetch_page(page, url: str, wait_selector: str = "body") -> str:
+    """Navigue vers une URL avec retry et retourne le HTML."""
+    for attempt in range(3):
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_selector(wait_selector, timeout=10000)
+            # Scroll léger pour déclencher le lazy-loading
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+            await asyncio.sleep(random.uniform(0.8, 1.8))
+            return await page.content()
+        except PlaywrightTimeout:
+            print(f"  ⏱ Timeout (tentative {attempt+1}/3) sur {url}")
+            await asyncio.sleep(3)
+        except Exception as e:
+            print(f"  ❌ Erreur fetch: {e}")
+            await asyncio.sleep(3)
+    return ""
+
+
+async def bypass_captcha_check(page) -> bool:
+    """Détecte et signale un captcha Amazon."""
+    content = await page.content()
+    if "captcha" in content.lower() or "robot" in content.lower():
+        print("\n⚠️  CAPTCHA détecté ! Amazon a bloqué la requête.")
+        print("   → Conseil: attendez quelques minutes puis relancez.")
+        print("   → Ou utilisez un proxy résidentiel (--proxy http://user:pass@host:port)\n")
+        return True
+    return False
+
+
+async def scrape_amazon(query: str, max_pages: int = 3, output_file: str = "amazon_results.csv", proxy: str = None):
+    """Scraper principal."""
+    print(f"\n🚀 Amazon Scraper — Recherche : '{query}'")
+    print(f"   Pages : {max_pages} | Output : {output_file}\n")
+
+    all_products = []
+    user_agent = random.choice(USER_AGENTS)
+
+    async with async_playwright() as p:
+        browser_args = {
+            "headless": True,
+            "args": [
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1366,768",
+            ]
+        }
+        if proxy:
+            browser_args["proxy"] = {"server": proxy}
+
+        browser = await p.chromium.launch(**browser_args)
+        context = await browser.new_context(
+            user_agent=user_agent,
+            viewport={"width": 1366, "height": 768},
+            locale="fr-FR",
+            timezone_id="Europe/Paris",
+            extra_http_headers={
+                "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "DNT": "1",
+            }
+        )
+
+        # Masquer les marqueurs Playwright (anti-détection)
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+            window.chrome = { runtime: {} };
+        """)
+
+        page = await context.new_page()
+
+        # ── Collecte des URLs produits ──────────────────────────────────────
+        product_urls = []
+        for page_num in range(1, max_pages + 1):
+            search_url = f"{BASE_URL}/s?k={query.replace(' ', '+')}&page={page_num}&language=fr_FR"
+            print(f"📄 Page de résultats {page_num}/{max_pages} : {search_url}")
+
+            html = await fetch_page(page, search_url, '[data-component-type="s-search-result"], #noResultsTitle')
+
+            if not html:
+                print("  ⚠️ HTML vide, page ignorée.")
+                continue
+
+            if await bypass_captcha_check(page):
+                break
+
+            results = parse_search_results(html)
+            if not results:
+                print(f"  ⚠️ Aucun résultat trouvé sur la page {page_num}.")
+                break
+
+            print(f"  ✅ {len(results)} produits trouvés")
+            for r in results:
+                if r["url_produit"] not in [u["url_produit"] for u in product_urls]:
+                    product_urls.append(r)
+
+            await asyncio.sleep(random.uniform(2.0, 4.5))
+
+        print(f"\n🔍 Total URLs collectées : {len(product_urls)}")
+        print("─" * 60)
+
+        # ── Scraping fiche produit ─────────────────────────────────────────
+        for i, prod in enumerate(product_urls, 1):
+            url = prod["url_produit"]
+            print(f"[{i:02d}/{len(product_urls)}] Scraping: {url}")
+
+            html = await fetch_page(page, url, "#productTitle, #title, h1")
+
+            if not html:
+                print("  ⚠️ Page vide, produit ignoré.")
+                continue
+
+            if await bypass_captcha_check(page):
+                print("  🛑 Arrêt du scraping pour éviter le ban.")
+                break
+
+            product_data = parse_product_page(html, url)
+
+            if not product_data.get("nom_produit"):
+                print("  ⚠️ Nom produit vide, probablement redirigé.")
+                continue
+
+            print(f"  ✓ {product_data['nom_produit'][:60]} | {product_data['prix']} | ⭐ {product_data['avis_note']}")
+            all_products.append(product_data)
+
+            # Pause anti-bot entre chaque fiche
+            delay = random.uniform(2.5, 6.0)
+            await asyncio.sleep(delay)
+
+        await browser.close()
+
+    # ── Export CSV ─────────────────────────────────────────────────────────
+    if not all_products:
+        print("\n❌ Aucun produit extrait. Vérifiez votre connexion ou essayez un proxy.")
+        return
+
+    df = pd.DataFrame(all_products, columns=CSV_FIELDS)
+    df.to_csv(output_file, index=False, encoding="utf-8-sig", quoting=csv.QUOTE_ALL)
+
+    print(f"\n{'='*60}")
+    print(f"✅ Scraping terminé !")
+    print(f"   {len(df)} produits exportés → {output_file}")
+    print(f"   Champs : {', '.join(CSV_FIELDS)}")
+    print(f"{'='*60}\n")
+
+    # Aperçu rapide
+    print("📊 Aperçu des données :")
+    print(df[["nom_produit", "prix", "revendeur", "avis_note", "avis_count"]].head(5).to_string(index=False))
+
+
+# ─── CLI ──────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="🛒 Amazon Scraper — Hackathon Edition",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Exemples :
+  python amazon_scraper.py --query "abris de jardin"
+  python amazon_scraper.py --query "abris de jardin" --pages 5 --output abris_jardin.csv
+  python amazon_scraper.py --query "abris de jardin" --proxy http://user:pass@proxy:8080
+        """
+    )
+    parser.add_argument("--query", "-q", required=True, help="Mot-clé de recherche Amazon")
+    parser.add_argument("--pages", "-p", type=int, default=3, help="Nombre de pages de résultats (défaut: 3)")
+    parser.add_argument("--output", "-o", default=None, help="Fichier CSV de sortie")
+    parser.add_argument("--proxy", default=None, help="Proxy HTTP (ex: http://user:pass@host:port)")
+
+    args = parser.parse_args()
+
+    if args.output is None:
+        slug = re.sub(r'[^a-z0-9]', '_', args.query.lower())
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.output = f"amazon_{slug}_{timestamp}.csv"
+
+    asyncio.run(scrape_amazon(
+        query=args.query,
+        max_pages=args.pages,
+        output_file=args.output,
+        proxy=args.proxy,
+    ))
+
+
+if __name__ == "__main__":
+    main()
