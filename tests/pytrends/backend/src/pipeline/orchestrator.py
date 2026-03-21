@@ -32,6 +32,19 @@ async def run_pipeline(keyword: str) -> AsyncGenerator[str, None]:  # type: igno
     # ------------------------------------------------------------------ #
     try:
         d = await asyncio.to_thread(fetch_trends, keyword)
+        import json, pprint
+        print("\n" + "="*60)
+        print(f"[trends DATA] keyword={keyword}")
+        print(f"  trend_pct   : {d['trend_pct']}%")
+        print(f"  seasonality : {d['seasonality']}")
+        print(f"  top_market  : {d['top_market']}")
+        print(f"  opportunity : {d['opportunity']}")
+        print(f"  regions     :")
+        for r in d["regions"]:
+            print(f"    {r['name']:<20} {r['value']}")
+        print(f"  interest    : {len(d['interest'])} points "
+              f"({d['interest'][0]['date']} → {d['interest'][-1]['date']})")
+        print("="*60 + "\n")
         yield format_sse(
             "google_trends",
             GoogleTrendsEvent(

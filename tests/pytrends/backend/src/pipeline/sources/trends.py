@@ -14,6 +14,7 @@ import os
 import random
 from typing import Any
 
+from curl_cffi.requests import Session as CurlSession
 from pytrends.request import TrendReq
 
 _MOCK = os.getenv("TRENDS_MOCK", "0") == "1"
@@ -75,6 +76,7 @@ def fetch_trends(keyword: str) -> dict[str, Any]:
         opportunity:  simple qualitative label ('High' / 'Medium' / 'Low')
     """
     pytrends = TrendReq(hl="en-US", tz=0, timeout=(10, 25))
+    pytrends.requests = CurlSession(impersonate="chrome110")
     pytrends.build_payload(
         [keyword],
         timeframe="today 12-m",
