@@ -13,18 +13,22 @@ from OpenHosta import emulate_async, config as openhosta_config
 from src.config import settings
 from src.models.report import Product, MarketAnalysis
 
-openhosta_config.DefaultModel.api_key = settings.openai_api_key
-openhosta_config.DefaultModel.model_name = settings.llm_model
+openhosta_config.DefaultModel.api_key = settings.openai_api_key or os.getenv("OPENHOSTA_DEFAULT_MODEL_API_KEY") or os.getenv("OPENAI_API_KEY")
+openhosta_config.DefaultModel.model_name = settings.llm_model or os.getenv("OPENHOSTA_DEFAULT_MODEL_NAME") or "gpt-4o-mini"
 
 MAX_TEXT_LENGTH = 30000
 
 
-def clean_html_for_llm(raw_html: str) -> str:
+def clean_html_for_llm(raw_html: str, base_url: str = "") -> str:
     """Strip noise from HTML and inject href values so the LLM can extract URLs."""
     soup = BeautifulSoup(raw_html, "html.parser")
     for a in soup.find_all("a", href=True):
         if a.text.strip():
-            a.string = f"{a.get_text(strip=True)} [URL: {a['href']}]"
+            href = a['href']
+            if base_url and href.startswith('/'):
+                from urllib.parse import urljoin
+                href = urljoin(base_url, href)
+            a.string = f"{a.get_text(strip=True)} [URL: {href}]"
     for tag in soup(["script", "style", "footer", "noscript", "svg"]):
         tag.extract()
     return soup.get_text(separator=" ", strip=True).replace("\xa0", " ")[:MAX_TEXT_LENGTH]
@@ -67,40 +71,49 @@ async def parse_marketplace_data(cleaned_text: str) -> list[dict]:
 
 
 async def fetch_html(source: str, query: str) -> str:
-    """Fetch raw HTML from a marketplace source for the given query.
-
-    Performs up to 2 attempts with a randomised 2–5 s delay on 429/503 responses.
-    Falls back to a minimal mock page if all attempts fail.
-    """
-    import random
+    """Fetch raw HTML from a marketplace using ScraperAPI."""
     import httpx
+    
+    SCRAPERAPI_URL = "http://api.scraperapi.com"
+    api_key = os.getenv("SCRAPERAPI_KEY")
+    if not api_key:
+        print("Missing SCRAPERAPI_KEY in environment. Returning empty string.")
+        return ""
+        
+    encoded_query = query.strip().replace(" ", "+")
+    target_url = ""
+    render_js = "false"
+    
+    if source == "Amazon":
+        target_url = f"https://www.amazon.fr/s?k={encoded_query}&page=1&language=fr_FR"
+    elif source == "Aliexpress":
+        target_url = f"https://www.aliexpress.com/wholesale?SearchText={encoded_query}&page=1&SortType=default"
+        render_js = "true"
+    elif source == "eBay":
+        target_url = f"https://www.ebay.fr/sch/i.html?_nkw={encoded_query}&_pgn=1&_ipg=60"
+    else:
+        return ""
 
-    url = f"https://www.amazon.fr/s?k={query.replace(' ', '+')}"
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    params = {
+        "api_key": api_key,
+        "url": target_url,
+        "country_code": "fr",
+        "render": render_js
     }
 
-    for attempt in range(2):
+    async with httpx.AsyncClient(timeout=120.0) as client:
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-                resp = await client.get(url, headers=headers)
-            if resp.status_code in (429, 503):
-                if attempt == 0:
-                    await asyncio.sleep(random.uniform(2, 5))
-                    continue
-            if resp.status_code == 200:
-                return resp.text
-        except Exception:
-            if attempt == 0:
-                await asyncio.sleep(random.uniform(2, 5))
-
-    return f"<html><body>{query} product listing unavailable</body></html>"
+            response = await client.get(SCRAPERAPI_URL, params=params)
+            response.raise_for_status()
+            
+            html = response.text
+            if source in ["Aliexpress", "eBay"] and len(html) < 5000:
+                print(f"Anti-bot payload detected for {source} ({len(html)} chars).")
+                return ""
+            return html
+        except httpx.HTTPError as e:
+            print(f"HTTP Error fetching {source}: {e}")
+            return ""
 
 
 async def generate_search_queries(product_description: str) -> list[str]:
@@ -108,7 +121,23 @@ async def generate_search_queries(product_description: str) -> list[str]:
     Generate exactly 3 marketplace search keywords for the given product description.
     Returns a list of exactly 3 short keyword strings suitable for Amazon/Google Shopping.
     """
-    return await emulate_async()
+    import ast
+    result = await emulate_async()
+    
+    if isinstance(result, list):
+        return [str(item) for item in result]
+        
+    if isinstance(result, str):
+        stripped = result.strip()
+        try:
+            parsed = ast.literal_eval(stripped)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+        except (ValueError, SyntaxError):
+            cleaned = stripped.strip("[]").split(",")
+            return [x.strip(" '\"") for x in cleaned if x.strip()]
+            
+    return []
 
 
 async def generate_market_analysis(
