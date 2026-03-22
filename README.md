@@ -1,249 +1,179 @@
-# Market Intelligence AI
+# Shipper
 
-> Enter a product idea. Watch the market analysis build itself in real time.
+**Transformez une idée produit en décision fondée — en quelques minutes.**
 
-A hackathon-MVP web app that turns a keyword into a structured market intelligence
-report — streamed live, section by section — in under 60 seconds.
-
-```
-Browser → EventSource('/api/sse') → SvelteKit BFF → FastAPI pipeline → LLM + scrapers
-```
+Shipper est une plateforme d'intelligence marché propulsée par l'IA. Décrivez un produit en langage naturel : le système lance un pipeline agentique qui analyse la concurrence sur les marketplaces, mesure l'intérêt sur Google Trends, synthétise tout via LLM, et vous livre un verdict clair — go ou no-go — avec les risques, les opportunités et un rapport exportable.
 
 ---
 
-## What it does
+## Comment ça marche
 
-1. User types a keyword (e.g. *"eco-friendly bamboo skincare"*)
-2. The backend fires parallel requests to **Amazon**, **Google Trends**, and **Reddit**
-3. Marketplace products appear within **5 seconds** as the first live result
-4. An LLM streams the remaining sections token-by-token:
-   - **Viability score** (0–100) with explanation
-   - **Target persona**
-   - **Differentiation angles**
-   - **Competitive overview**
-5. Full report done in **< 60 seconds**
-6. Export as **Markdown** (agent-parsable schema) or **PDF**
+```
+Vous décrivez votre produit
+        ↓
+Shipper affine vos mots-clés et vous les soumet (validation humaine)
+        ↓
+Scraping Amazon · Google Trends
+        ↓
+Analyse IA : score de viabilité · persona · différenciation · concurrence
+        ↓
+Verdict go/no-go + rapport Markdown / PDF
+```
+
+Chaque étape est visible en temps réel. Vous gardez la main : le workflow s'arrête pour vous demander confirmation avant de continuer.
 
 ---
 
 ## Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | SvelteKit 2 + Svelte 5 (runes) |
-| UI components | shadcn-svelte |
-| Frontend runtime | Bun |
+| Couche | Technologie |
+|--------|-------------|
+| Frontend | SvelteKit + Svelte 5 (runes) |
+| UI & icônes | shadcn-svelte · HugeIcons · layerchart |
+| Background | WebGL shader (canvas animé) |
 | Backend | FastAPI + Python 3.12 |
-| Backend runtime | uv |
-| Streaming | Server-Sent Events (SSE) — BFF proxy pattern |
-| LLM | OpenHosta → OpenAI `gpt-4o-mini` (configurable) |
-| Marketplace | Amazon (httpx + BeautifulSoup4) |
-| Trends | Google Trends (pytrends) |
-| Social | Reddit public JSON API |
-| PDF export | fpdf2 |
+| Package managers | uv (backend) · npm (frontend) |
+| Transport | WebSocket (streaming temps réel) |
+| LLM | [OpenHosta](https://github.com/hand-e-fr/OpenHosta) → OpenAI |
+| Scraping | httpx + BeautifulSoup4 |
+| Tendances | pytrends (Google Trends) |
+| Export | fpdf2 (PDF) · Markdown natif |
 
 ---
 
-## Project structure
+## Lancer le projet
 
-```
-.
-├── backend/                  # FastAPI backend (uv)
-│   ├── src/
-│   │   ├── main.py           # App factory, CORS, /health
-│   │   ├── config.py         # pydantic-settings (APP_* env vars)
-│   │   ├── models/           # Pydantic SSE + report models
-│   │   ├── routes/           # /stream, /export/md, /export/pdf
-│   │   └── pipeline/
-│   │       ├── orchestrator.py     # Parallel fetch + LLM chain + SSE emission
-│   │       ├── sources/            # amazon.py, trends.py, reddit.py
-│   │       ├── analysis/           # scorer, persona, angles, competitive
-│   │       ├── export_generator.py # Markdown schema
-│   │       └── pdf_generator.py    # fpdf2 PDF
-│   └── src/tests/            # pytest test suite (TDD)
-├── frontend/                 # SvelteKit frontend (bun)
-│   └── src/
-│       ├── lib/
-│       │   ├── types.ts      # Zod schemas for all SSE events
-│       │   └── sse.ts        # EventSource wrapper
-│       └── routes/
-│           ├── api/sse/      # BFF SSE proxy → FastAPI
-│           └── +page.svelte  # Main page (Svelte 5 runes)
-├── specs/                    # Product spec, plan, tasks, contracts
-│   └── 001-market-intelligence-mvp/
-│       ├── spec.md
-│       ├── plan.md
-│       ├── tasks.md
-│       ├── contracts/        # Frozen SSE event + MD export schemas
-│       └── research.md
-├── run.sh                    # Start both services
-└── prd.md                    # Product Requirements Document
-```
+### Prérequis
 
----
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) — gestionnaire Python
+- Node.js + npm
+- Une clé API OpenAI
+- *(Optionnel)* Une clé [ScraperAPI](https://www.scraperapi.com/) pour le scraping en production
 
-## Getting started
-
-### Prerequisites
-
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) — Python package manager
-- [Bun](https://bun.sh) — JavaScript runtime
-- An OpenAI API key
-
-### 1. Configure environment
+### 1. Variables d'environnement
 
 ```bash
 cp backend/.env.example backend/.env
-# Edit backend/.env and set APP_OPENAI_API_KEY=sk-...
-
-cp frontend/.env.example frontend/.env
 ```
 
-### 2. Start both services
+Éditer `backend/.env` :
 
-```bash
-chmod +x run.sh
-./run.sh
+```env
+APP_OPENAI_API_KEY=sk-...
+APP_LLM_MODEL=gpt-4o-mini
+APP_CORS_ORIGINS=["http://localhost:5173"]
+APP_SOURCE_TIMEOUT=10
+SCRAPERAPI_KEY=        # optionnel
 ```
 
-Opens:
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8000
-
-### 3. Manual start (if needed)
+### 2. Backend
 
 ```bash
-# Backend
 cd backend
 uv sync
 uv run uvicorn src.main:app --reload --port 8000
-
-# Frontend (separate terminal)
-cd frontend
-bun install
-bun run dev
 ```
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+- Frontend : **http://localhost:5173**
+- Backend : **http://localhost:8000/health**
+
+---
+
+## Pipeline — les 9 étapes
+
+| # | Étape | Description |
+|---|-------|-------------|
+| 1 | Description | Nettoyage et structuration de la description produit |
+| 2 | Keyword Refinement | Génération de mots-clés SEO pertinents via LLM |
+| 3 | Keyword Confirmation | **Validation humaine** — vous confirmez ou corrigez |
+| 4 | Product Research | Scraping Amazon : produits, prix, notes, avis |
+| 5 | Product Validation | Filtrage et pertinence des résultats (LLM) |
+| 6 | Market Research | Google Trends : évolution temporelle + intérêt par région |
+| 7 | AI Analysis | Synthèse complète : score, persona, différenciation, concurrence |
+| 8 | Final Criteria | Extraction du verdict go/no-go + risques + opportunités |
+| 9 | Report | Rapport final disponible en téléchargement |
 
 ---
 
 ## API
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check → `{"status": "ok"}` |
-| `/stream?keyword={kw}` | GET | SSE stream (via BFF: `/api/sse?keyword={kw}`) |
-| `/export/md?keyword={kw}` | GET | Markdown report download |
-| `/export/pdf?keyword={kw}` | GET | PDF report download |
+### WebSocket — `ws://localhost:8000/ws/workflow`
 
-### SSE event sequence (stable contract)
-
-```
-source_unavailable?      ← 0–3 times if a source times out
-marketplace_products     ← first event, < 5s
-viability_score          ← streaming tokens → complete
-target_persona           ← streaming tokens → complete
-differentiation_angles   ← streaming tokens → complete
-competitive_overview     ← streaming tokens → complete
-export_ready             ← signals report complete
-```
-
-Each LLM section follows the pattern:
+**Client → Serveur**
 
 ```json
-{"status": "streaming", "token": "The"}
-{"status": "streaming", "token": " market"}
-{"status": "complete",  "content": "The market shows...", "score": 74}
+{ "type": "start", "description": "vélo électrique pliable urbain" }
+{ "type": "confirmation", "step_id": "keyword_confirmation", "confirmed": true }
+{ "type": "user_input", "step_id": "...", "data": { "description": "..." } }
+{ "type": "retry", "step_id": "..." }
 ```
 
-### Markdown export schema (machine-parsable)
+**Serveur → Client**
 
-The Markdown export follows a frozen schema designed for AI agent consumption:
-
-```markdown
-# Market Intelligence Report: {keyword}
-
-## Marketplace Products
-- **{title}** — {price} — [View on Amazon]({url})
-
-## Viability Score
-Score: 74/100        ← always this exact format
-
-## Target Persona
-...
-
-## Differentiation Angles
-...
-
-## Competitive Overview
-...
+```
+workflow_started        total_steps
+step_activated          step_id, step_number, label
+step_processing         step_id
+step_streaming_token    step_id, token
+step_result             step_id, component_type, data
+confirmation_request    step_id, component_type, data
+step_error              step_id, error, retryable
+workflow_complete       run_id
 ```
 
-Score extraction regex: `^Score: (\d+)/100$`
+### Export — REST
+
+```
+GET /api/export/{run_id}/markdown   → rapport .md
+GET /api/export/{run_id}/pdf        → rapport .pdf
+GET /health                         → {"status": "ok"}
+```
 
 ---
 
-## Development
+## Structure
 
-### Running tests
-
-```bash
-cd backend
-uv run pytest -v
 ```
-
-Current TDD status:
-
-| Test file | Status | Turns green when |
-|-----------|--------|-----------------|
-| `test_health.py` | ✅ GREEN | — |
-| `test_stream_contract.py` | 🟡 6/8 | LLM sections wired in orchestrator |
-| `test_sources.py` | 🔴 0/9 | Amazon / Trends / Reddit implemented |
-| `test_export.py` | 🔴 0/7 | `generate_markdown()` implemented |
-
-### Backend configuration
-
-All settings use the `APP_` env prefix:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `APP_OPENAI_API_KEY` | *(required)* | OpenAI API key |
-| `APP_LLM_MODEL` | `gpt-4o-mini` | LLM model name |
-| `APP_CORS_ORIGINS` | `["http://localhost:5173"]` | Allowed CORS origins |
-| `APP_SOURCE_TIMEOUT` | `10` | Seconds before a data source is skipped |
-
-### Architecture notes
-
-**BFF proxy pattern**: The browser connects to SvelteKit's `/api/sse`, which proxies
-to FastAPI. FastAPI is never exposed directly to the browser. This avoids CORS
-complexity and allows adding auth headers later without frontend changes.
-
-**Pipeline resilience**: Each data source has a 10-second timeout. If a source
-exceeds it, the pipeline emits a `source_unavailable` event and continues with
-the remaining sources. Results are always partial rather than total failure.
-
-**Svelte 5 rune workaround**: svelte-check 4.4.5 requires the `$state()` variable
-name to contain the string `"state"`. Use `let pageState = $state({...})`, not
-`let data = $state({...})`.
+.
+├── backend/
+│   └── src/
+│       ├── main.py                    # App FastAPI
+│       ├── config.py                  # Config pydantic-settings
+│       ├── scraper.py                 # Scraping Amazon
+│       ├── store.py                   # État en mémoire (runs)
+│       ├── routes/
+│       │   ├── workflow.py            # WebSocket /ws/workflow
+│       │   └── export.py             # Exports Markdown + PDF
+│       ├── logic/
+│       │   └── export.py             # Rendu Markdown + fpdf2
+│       └── workflow/
+│           ├── engine.py              # Moteur agentique
+│           ├── registry.py            # Déclaration du pipeline
+│           ├── step_base.py           # Classe de base StepBase
+│           └── steps/                 # s01 → s09
+└── frontend/
+    └── src/
+        ├── lib/
+        │   ├── ws.ts                  # Wrapper WebSocket
+        │   ├── workflow-types.ts      # Types Zod
+        │   └── components/
+        │       ├── ShaderBackground.svelte
+        │       ├── StepRenderer.svelte
+        │       ├── charts/            # Courbes, régions, score
+        │       ├── steps/             # Composants par étape
+        │       └── ui/                # shadcn-svelte
+        └── routes/
+            └── workflow/+page.svelte  # Page principale
+```
 
 ---
 
-## Roadmap
-
-**Phase 1 — Hackathon MVP** *(current)*
-- [x] Project architecture + SSE pipeline scaffold
-- [x] TDD test suite (RED phase)
-- [ ] Amazon scraper
-- [ ] Google Trends + Reddit sources
-- [ ] LLM analysis chain (OpenHosta)
-- [ ] Markdown + PDF export
-- [ ] Full dashboard UI (shadcn-svelte)
-
-**Phase 2 — Post-hackathon**
-- [ ] X/Twitter and eBay data sources
-- [ ] Analysis history and idea comparison
-- [ ] External agent API
-
-**Phase 3 — Vision**
-- [ ] Real-time market monitoring with alerts
-- [ ] Team collaboration
-- [ ] White-label reports
+Construit avec [OpenHosta](https://github.com/hand-e-fr/OpenHosta) — la librairie open-source de [Hand-e](https://hand-e.net) qui transforme des fonctions Python typées en appels LLM.
