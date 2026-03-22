@@ -49,10 +49,14 @@
     return () => cancelAnimationFrame(raf);
   });
 
-  // Auto-scroll to new content when near the bottom (chat-like behaviour)
+  // Auto-scroll to new content when near the bottom (chat-like behaviour).
+  // Track length, status, data AND tokens so product batches and streaming also trigger scroll.
   $effect(() => {
     const _len = visibleSteps.length;
-    const _last = visibleSteps.at(-1)?.status;
+    const last = visibleSteps.at(-1);
+    const _status = last?.status;
+    const _data = last?.data;
+    const _tokens = last?.tokens;
     tick().then(() => {
       const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 100;
       if (nearBottom) {
@@ -263,6 +267,10 @@
       {:else if workflowState.errorMsg}
         <div class="mt-6 flex justify-end">
           <button class="reset-btn-bottom" onclick={reset}>Nouvelle analyse</button>
+        </div>
+      {:else if workflowState.status === 'open' && visibleSteps.at(-1)?.status === 'complete'}
+        <div class="flex justify-center py-6" in:fly={{ y: 6, duration: 200 }}>
+          <Spinner class="size-5 text-muted-foreground" />
         </div>
       {/if}
 

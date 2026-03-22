@@ -3,6 +3,7 @@
   import { Button } from '$lib/components/ui/button';
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { ArrowRight01Icon, Cancel01Icon, CheckmarkCircle01Icon } from '@hugeicons/core-free-icons';
+  import { slide } from 'svelte/transition';
 
   let { data, onAction, stepId }: {
     data: { prompt?: string };
@@ -19,12 +20,12 @@
 </script>
 
 {#if validated}
-  <div class="flex items-center gap-2 text-green-600">
+  <div class="flex items-center justify-center gap-2 text-muted-foreground" in:slide={{ axis: 'y', duration: 300 }}>
     <HugeiconsIcon icon={CheckmarkCircle01Icon} size={18} />
     <span class="text-sm font-medium">Validated</span>
   </div>
 {:else}
-  <div class="flex flex-col gap-3 items-center">
+  <div class="flex flex-col gap-3 items-center" out:slide={{ axis: 'y', duration: 250 }}>
     <p class="font-medium">{data.prompt ?? 'Does this look correct?'}</p>
     <div class="flex items-center gap-3">
       <button
