@@ -66,7 +66,7 @@ async def fetch_html(source: str, query: str) -> str:
     """
     api_key = os.getenv("SCRAPERAPI_KEY")
     if not api_key:
-        print("⚠️ Warning: SCRAPERAPI_KEY is missing! Returning empty snippet.")
+        print("Missing SCRAPERAPI_KEY in environment. Returning empty string.")
         return ""
         
     encoded_query = query.strip().replace(" ", "+")
@@ -100,11 +100,11 @@ async def fetch_html(source: str, query: str) -> str:
             
             # Anti-bot check
             if source in ["Aliexpress", "eBay"] and len(html) < 5000:
-                print(f"⚠️ Suspect content ({len(html)} chars) for {source} — probable anti-bot page")
+                print(f"Anti-bot payload detected for {source} ({len(html)} chars).")
                 return ""
                 
             return html
             
         except httpx.HTTPError as e:
-            print(f"❌ HTTP Error fetching {source}: {str(e)}")
+            print(f"HTTP Error fetching {source}: {e}")
             return ""
