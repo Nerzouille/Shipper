@@ -5,7 +5,6 @@
   import { HugeiconsIcon } from '@hugeicons/svelte';
   import { LinkSquare02Icon, ImageNotFoundIcon } from '@hugeicons/core-free-icons';
   import { fade, blur } from 'svelte/transition';
-  import { tick } from 'svelte';
   import { Button } from '$lib/components/ui/button';
   import { Spinner } from '$lib/components/ui/spinner';
 
@@ -31,18 +30,6 @@
   const products = $derived(data.products ?? []);
   const isFinal = $derived(data.is_final ?? false);
 
-  // Auto-scroll as new products arrive
-  $effect(() => {
-    const pLen = products.length;
-    if (pLen > 0) {
-      tick().then(() => {
-        window.scrollTo({
-          top: document.body.scrollHeight,
-          behavior: 'smooth'
-        });
-      });
-    }
-  });
 </script>
 
 <div class="flex flex-col gap-2">
