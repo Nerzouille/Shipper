@@ -9,7 +9,6 @@ export const ProductSchema = z.object({
   rating_range: z.number(),
   rating_count: z.number(),
   main_features: z.array(z.string()),
-  image_url: z.string().optional(),
 });
 export type Product = z.infer<typeof ProductSchema>;
 
@@ -57,21 +56,6 @@ export const AiAnalysisDataSchema = z.object({
   differentiation_angles: z.object({ content: z.string() }),
   competitive_overview: z.object({ content: z.string() }),
 });
-
-export const PersonaSchema = z.object({
-  name: z.string(),
-  age_range: z.string(),
-  occupation: z.string(),
-  motivations: z.array(z.string()),
-  pain_points: z.array(z.string()),
-});
-
-export const PersonaSetDataSchema = z.object({
-  personas: z.array(PersonaSchema),
-});
-
-export type Persona = z.infer<typeof PersonaSchema>;
-export type PersonaSetData = z.infer<typeof PersonaSetDataSchema>;
 
 export const FinalCriteriaDataSchema = z.object({
   summary: z.string(),
