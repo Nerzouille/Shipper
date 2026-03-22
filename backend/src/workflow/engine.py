@@ -15,10 +15,15 @@ from .messages import (
 from .run import WorkflowRun, WorkflowStatus, StepOutput
 from .step_base import Step, StepError
 
-# step_id → step_id to loop back to on rejection
+# step_id → step_id to loop back to on rejection (confirmation steps)
 LOOP_TARGETS: dict[str, str] = {
     "keyword_confirmation": "product_description",
     "product_validation": "product_research",
+}
+
+# step_id → step_id to loop back to on non-retryable StepError
+ERROR_LOOP_TARGETS: dict[str, str] = {
+    "product_research": "product_description",
 }
 
 
@@ -123,6 +128,12 @@ class WorkflowEngine:
                     ).model_dump()
                 )
                 if not exc.retryable:
+                    # Check if there's an automatic loop-back target for this error
+                    error_loop_target = ERROR_LOOP_TARGETS.get(step.step_id)
+                    if error_loop_target:
+                        run.current_step_index = self._step_index(error_loop_target)
+                        run.status = WorkflowStatus.running
+                        continue
                     run.status = WorkflowStatus.error
                     return
 
@@ -137,6 +148,17 @@ class WorkflowEngine:
                         run.status = WorkflowStatus.running
                         break
                 continue  # re-run same step
+
+            except Exception as exc:
+                await ws.send_json(
+                    StepErrorMessage(
+                        step_id=step.step_id,
+                        error=str(exc),
+                        retryable=False,
+                    ).model_dump()
+                )
+                run.status = WorkflowStatus.error
+                return
 
             if loop_back_step_id:
                 run.current_step_index = self._step_index(loop_back_step_id)

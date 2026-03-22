@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from src.routes.workflow import router as workflow_router
+from src.routes.export import router as export_router
+
 from src.scraper import (
     fetch_html, 
     clean_html_for_llm, 
@@ -14,11 +17,10 @@ from src.scraper import (
     generate_search_queries
 )
 
-# --- 1. In-Memory Store & Global Limits ---
 MEMORY_STORE: Dict[str, Dict[str, Any]] = {}
 CONCURRENCY_LIMITER = asyncio.Semaphore(2)  # Limit to 2 concurrent API calls total
 
-app = FastAPI(title="Market Intelligence In-Memory API")
+app = FastAPI(title="Guided Analysis Workflow API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,7 +29,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 2. Pydantic Schemas ---
+app.include_router(workflow_router)
+app.include_router(export_router)
 
 class InitSearchRequest(BaseModel):
     product_description: str
@@ -44,8 +47,6 @@ class GenerateStrategyResponse(BaseModel):
     persona: Dict[str, Any]
     strategy: str
 
-# --- 3. Routes ---
-
 @app.post("/api/init-search", response_model=InitSearchResponse)
 async def init_search(request: InitSearchRequest):
     session_id = str(uuid.uuid4())
@@ -56,7 +57,6 @@ async def init_search(request: InitSearchRequest):
         "products_by_source": {}
     }
     
-    # Call OpenHosta to generate 3 search queries
     queries = await generate_search_queries(request.product_description)
     
     MEMORY_STORE[session_id]["search_queries"] = queries
@@ -80,7 +80,6 @@ async def process_single_source(source: str, queries: List[str]) -> dict:
     base_url = BASE_URLS.get(source, "")
     
     async def fetch_and_parse(query: str):
-        # We wrap the sensitive API calls with the semaphore
         async with CONCURRENCY_LIMITER:
             raw_html = await fetch_html(source, query)
             if not raw_html:
@@ -90,11 +89,9 @@ async def process_single_source(source: str, queries: List[str]) -> dict:
             if not clean_text:
                 return []
             
-            # Small delay before LLM parsing to let the rate limit breather
             await asyncio.sleep(0.5)
             return await parse_marketplace_data(clean_text)
 
-    # Process queries with a small staggered delay
     all_tasks = []
     for i, q in enumerate(queries):
         all_tasks.append(fetch_and_parse(q))
@@ -129,7 +126,6 @@ async def scrape_stream(session_id: str, request: ScrapeStreamRequest):
         MEMORY_STORE[session_id]["products_by_source"][source] = []
 
     async def event_generator():
-        # Create coroutines for each source
         tasks = {
             asyncio.create_task(process_single_source(source, final_queries)): source
             for source in sources
@@ -138,7 +134,6 @@ async def scrape_stream(session_id: str, request: ScrapeStreamRequest):
         pending = set(tasks.keys())
         
         while pending:
-            # wait for at least one task to complete, with a 15s timeout for keep-alive
             done, pending = await asyncio.wait(
                 pending, 
                 return_when=asyncio.FIRST_COMPLETED,
@@ -146,7 +141,6 @@ async def scrape_stream(session_id: str, request: ScrapeStreamRequest):
             )
             
             if not done:
-                # Keep-alive comment to prevent proxy timeout
                 yield ": keep-alive\n\n"
                 continue
 
@@ -177,8 +171,7 @@ async def generate_strategy(session_id: str):
     session_data = MEMORY_STORE[session_id]
     all_products = session_data["products_by_source"]
     
-    # TODO: Calculate average price, extract pain-points
-    # TODO: Final LLM call to generate the market analysis
+    # TODO: Implement final LLM strategy generation using OpenHosta
     
     mock_strategy = {
         "market_bilan": "High demand, but current products suffer from long delivery times.",
@@ -191,3 +184,7 @@ async def generate_strategy(session_id: str):
     }
     
     return GenerateStrategyResponse(**mock_strategy)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
