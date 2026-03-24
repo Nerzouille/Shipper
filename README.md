@@ -4,6 +4,10 @@
 
 Shipper est une plateforme d'intelligence marché propulsée par l'IA. Décrivez un produit en langage naturel : le système lance un pipeline agentique qui analyse la concurrence sur les marketplaces, mesure l'intérêt sur Google Trends, synthétise tout via LLM, et vous livre un verdict clair — go ou no-go — avec les risques, les opportunités et un rapport exportable.
 
+![Homepage](images/homepage.png)
+![Scrapping](images/scrapping.png)
+![Market Analysis](images/market_analysis.png)
+
 ---
 
 ## Comment ça marche
