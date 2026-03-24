@@ -11,7 +11,9 @@
   import { fly, slide } from 'svelte/transition';
   import { tick } from 'svelte';
 
-  const WS_URL = 'ws://localhost:8000/ws/workflow';
+  import { env } from '$env/dynamic/public';
+  // Fallback to localhost for local dev — set PUBLIC_WS_URL on Railway
+  const WS_URL = env.PUBLIC_WS_URL ?? 'ws://localhost:8000/ws/workflow';
 
   let workflowState = $state({
     status: 'idle' as WsStatus,
